@@ -1,139 +1,281 @@
-'use client';
-import { useState, useEffect } from 'react';
-import Cookies from 'js-cookie';
-import BookingForm from '@/components/booking/BookingForm';
+"use client";
+
+import { useState, useEffect, useMemo } from "react";
+import Cookies from "js-cookie";
+import BookingForm from "@/components/booking/BookingForm";
+import RoomManageModal from "@/components/booking/RoomManageModal";
+import Swal from "sweetalert2";
 
 export default function BookingPage() {
-  const [activeTab, setActiveTab] = useState<'reserve' | 'history'>('reserve');
+  // ✅ แท็บ: เพิ่ม 'my-history'
+  const [activeTab, setActiveTab] = useState<"reserve" | "history" | "my-history">("reserve");
   const [rooms, setRooms] = useState<any[]>([]);
-  const [myBookings, setMyBookings] = useState<any[]>([]);
+  const [allBookings, setAllBookings] = useState<any[]>([]);
+  const [myBookings, setMyBookings] = useState<any[]>([]); 
   const [selectedRoom, setSelectedRoom] = useState<any | null>(null);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  
+  // ✅ เพิ่ม State สำหรับจัดการห้องประชุม (Admin)
+  const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
+  const [editingRoom, setEditingRoom] = useState<any | null>(null);
+
   const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
+  const [roomSearch, setRoomSearch] = useState("");
+  const [historySearch, setHistorySearch] = useState("");
 
-  const API_BASE = 'http://192.168.10.101:3000'; // IP เพื่อนคนที่ 2
-  const token = Cookies.get('access_token');
-  const userRole = Cookies.get('user_role') || 'EMPLOYEE';
+  const API_BASE = "http://192.168.10.101:3000/api";
+  const token = Cookies.get("access_token");
+  const userRole = (Cookies.get("user_role") || "EMPLOYEE").toUpperCase();
+  const isAdmin = userRole === "ADMIN";
 
-  // ดึงรายการห้องประชุมทั้งหมด
-  const fetchRooms = async () => {
+  useEffect(() => {
+    setMounted(true);
+    fetchProfile();
+    fetchRooms();
+    fetchAllHistory();
+    fetchMyHistory();
+  }, []);
+
+  const fetchProfile = async () => {
     try {
-      const res = await fetch(`${API_BASE}/rooms`, { 
-        headers: { 'Authorization': `Bearer ${token}` } 
+      const res = await fetch(`${API_BASE}/users/profile`, {
+        headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.ok) setRooms(await res.json());
+      if (res.ok) setCurrentUser(await res.json());
     } catch (err) { console.error(err); }
   };
 
-  // ดึงประวัติการจองของผู้ใช้งานปัจจุบัน
-  const fetchMyHistory = async () => {
+  const fetchRooms = async () => {
     try {
-      // หากเป็น ADMIN อาจจะดึงข้อมูลทั้งหมด หรือดึงแค่ของตนเองตามปกติ
-      const endpoint = userRole === 'ADMIN' ? `${API_BASE}/bookings` : `${API_BASE}/bookings/me`;
-      const res = await fetch(endpoint, { 
-        headers: { 'Authorization': `Bearer ${token}` } 
-      });
-      if (res.ok) setMyBookings(await res.json());
-    } catch (err) { console.error(err); } finally { setLoading(false); }
-  };
-
-  // 🗑 ฟังก์ชันยกเลิกการจอง
-  const handleCancelBooking = async (id: string) => {
-    if (!confirm('ยืนยันการยกเลิกการจองนี้ใช่หรือไม่?')) return;
-    try {
-      const res = await fetch(`${API_BASE}/bookings/${id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
+      const res = await fetch(`${API_BASE}/rooms`, {
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
-        alert('ยกเลิกการจองสำเร็จ');
-        fetchMyHistory();
-        fetchRooms();
+        const data = await res.json();
+        setRooms(Array.isArray(data) ? data : data.data || []);
       }
     } catch (err) { console.error(err); }
   };
 
-  useEffect(() => {
-    fetchRooms();
-    fetchMyHistory();
-  }, []);
+  const fetchAllHistory = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/bookings?type=all`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAllBookings(Array.isArray(data) ? data : data.data || []);
+      }
+    } catch (err) { console.error(err); }
+  };
+
+  const fetchMyHistory = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/bookings?type=my`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMyBookings(Array.isArray(data) ? data : data.data || []);
+      }
+    } catch (err) { console.error(err); } 
+    finally { setLoading(false); }
+  };
+
+  // ✅ ฟังก์ชันลบห้องสำหรับ Admin
+  const handleDeleteRoom = async (id: string, name: string) => {
+    const result = await Swal.fire({
+      title: "DELETE ROOM?",
+      text: `คุณต้องการลบห้อง "${name}" ใช่หรือไม่?`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#EF4444",
+      confirmButtonText: "DELETE",
+      customClass: { popup: "rounded-[35px] font-sans italic" },
+    });
+
+    if (result.isConfirmed) {
+      try {
+        const res = await fetch(`${API_BASE}/rooms/${id}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          Swal.fire({ icon: "success", title: "DELETED", timer: 1500, showConfirmButton: false });
+          fetchRooms();
+        }
+      } catch (err) { console.error(err); }
+    }
+  };
+
+  const handleCancelBooking = async (id: string, title: string) => {
+    const result = await Swal.fire({
+      title: "CONFIRM CANCEL?",
+      text: `ยืนยันการยกเลิก "${title}"?`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#EF4444",
+      confirmButtonText: "YES, CANCEL IT",
+      customClass: { popup: "rounded-[35px] font-sans italic" },
+    });
+
+    if (result.isConfirmed) {
+      try {
+        const res = await fetch(`${API_BASE}/bookings/${id}/cancel`, {
+          method: "PATCH",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        });
+        if (res.ok) {
+          Swal.fire({ icon: "success", title: "SUCCESS", timer: 1500, showConfirmButton: false });
+          fetchAllHistory(); fetchMyHistory(); fetchRooms();
+        }
+      } catch (err) { Swal.fire("Error", "Server Error", "error"); }
+    }
+  };
+
+  const filteredRooms = useMemo(() => rooms.filter(r => (r.name || "").toLowerCase().includes(roomSearch.toLowerCase())), [rooms, roomSearch]);
+  const filteredAllHistory = useMemo(() => allBookings.filter(b => (b.title || "").toLowerCase().includes(historySearch.toLowerCase())), [allBookings, historySearch]);
+  const filteredMyHistory = useMemo(() => myBookings.filter(b => (b.title || "").toLowerCase().includes(historySearch.toLowerCase())), [myBookings, historySearch]);
+
+  if (!mounted) return null;
 
   return (
-    <div className="p-8 max-w-7xl mx-auto text-black animate-in fade-in duration-700">
-      <div className="mb-10">
-        <h1 className="text-4xl font-black text-blue-900 italic tracking-tighter uppercase">Meeting Reservation</h1>
-        <p className="text-gray-400 font-medium">จัดการตารางเวลาและห้องประชุมใน ORGSPACE</p>
+    <div className="p-8 max-w-7xl mx-auto text-black animate-in fade-in duration-700 font-sans min-h-screen">
+      
+      {/* 🟦 HEADER SECTION */}
+      <div className="mb-10 flex justify-between items-end border-b border-gray-100 pb-8">
+        <div>
+          <h1 className="text-5xl font-black text-blue-900 italic tracking-tighter uppercase leading-none text-black">Booking Center</h1>
+          <p className="text-gray-400 text-[10px] font-black uppercase tracking-[0.3em] mt-3 italic text-black">
+            Timeline / <span className="text-blue-600">Space Management</span>
+          </p>
+        </div>
+        <div className="flex gap-3">
+          {/* ✅ ปุ่มเพิ่มห้องประชุม (Admin Only) */}
+          {isAdmin && (
+            <button 
+              onClick={() => { setEditingRoom(null); setIsRoomModalOpen(true); }}
+              className="bg-emerald-600 text-white px-8 py-4 rounded-[22px] font-black shadow-lg hover:bg-black transition-all active:scale-95 uppercase text-[10px] tracking-widest italic"
+            >
+              + Create Room
+            </button>
+          )}
+          <button onClick={() => { fetchRooms(); fetchAllHistory(); fetchMyHistory(); }} className="bg-blue-900 text-white px-8 py-4 rounded-[22px] font-black shadow-xl hover:bg-black transition-all active:scale-95 uppercase text-[10px] tracking-widest italic">Sync Data</button>
+        </div>
       </div>
 
-      <div className="flex bg-gray-100 p-1.5 rounded-2xl mb-10 w-fit shadow-inner">
-        <button onClick={() => setActiveTab('reserve')} className={`px-8 py-3 rounded-xl text-xs font-black transition-all ${activeTab === 'reserve' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400'}`}>AVAILABLE ROOMS</button>
-        <button onClick={() => setActiveTab('history')} className={`px-8 py-3 rounded-xl text-xs font-black transition-all ${activeTab === 'history' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400'}`}>
-          {userRole === 'ADMIN' ? 'ALL BOOKINGS' : 'MY HISTORY'}
-        </button>
+      {/* 📑 TABS SECTION */}
+      <div className="flex flex-col md:flex-row justify-between items-center mb-10 gap-6">
+        <div className="flex bg-gray-100 p-1.5 rounded-[25px] shadow-inner border border-gray-200/50">
+          <button onClick={() => setActiveTab("reserve")} className={`px-10 py-3.5 rounded-[20px] text-[10px] font-black transition-all uppercase italic ${activeTab === "reserve" ? "bg-white text-blue-900 shadow-md" : "text-gray-400"}`}>Available Spaces</button>
+          <button onClick={() => setActiveTab("history")} className={`px-10 py-3.5 rounded-[20px] text-[10px] font-black transition-all uppercase italic ${activeTab === "history" ? "bg-white text-blue-900 shadow-md" : "text-gray-400"}`}>Global Schedule</button>
+          <button onClick={() => setActiveTab("my-history")} className={`px-10 py-3.5 rounded-[20px] text-[10px] font-black transition-all uppercase italic ${activeTab === "my-history" ? "bg-white text-blue-900 shadow-md" : "text-gray-400"}`}>My History</button>
+        </div>
+        <div className="relative w-full md:w-80">
+          <input type="text" placeholder="Search..." className="w-full p-5 pl-14 bg-white border border-gray-100 rounded-[25px] shadow-inner font-bold text-xs italic text-black focus:ring-4 ring-blue-50 outline-none transition-all" value={activeTab === "reserve" ? roomSearch : historySearch} onChange={(e) => activeTab === "reserve" ? setRoomSearch(e.target.value) : setHistorySearch(e.target.value)} />
+          <span className="absolute left-6 top-1/2 -translate-y-1/2 opacity-40">🔍</span>
+        </div>
       </div>
 
-      {activeTab === 'reserve' ? (
+      {activeTab === "reserve" ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {rooms.map((room) => (
-            <div key={room.id} className="bg-white rounded-[40px] p-8 border border-gray-100 shadow-sm hover:shadow-xl transition-all group">
-              <div className="flex justify-between items-start mb-6">
-                <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 text-xl font-bold italic border border-blue-100">R{room.id}</div>
-                <span className={`text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest ${room.status === 'Available' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
-                  {room.status}
-                </span>
+           {filteredRooms.map(room => {
+             // ✅ ตรวจสอบสถานะการจองปัจจุบัน (Occupied)
+             const isOccupied = allBookings.some(b => 
+               b.roomId?._id === room._id && b.status === 'APPROVED' && 
+               new Date() >= new Date(b.startTime) && new Date() <= new Date(b.endTime)
+             );
+
+             return (
+              <div key={room._id} className="bg-white rounded-[50px] p-10 border border-gray-50 shadow-sm hover:shadow-2xl hover:-translate-y-3 transition-all group relative overflow-hidden text-black">
+                <div className="flex justify-between items-start mb-8 relative z-10">
+                   <div className="w-16 h-16 bg-blue-900 text-white rounded-3xl flex items-center justify-center text-2xl font-black italic shadow-2xl rotate-3 group-hover:rotate-0 transition-transform">
+                     {room.name.charAt(0)}
+                   </div>
+                   <div className="flex flex-col items-end gap-2">
+                     {/* ✅ ปุ่มแก้ไข/ลบ (Admin Only) */}
+                     {isAdmin && (
+                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                         <button onClick={() => { setEditingRoom(room); setIsRoomModalOpen(true); }} className="p-2 bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-500 hover:text-white transition-all">✏️</button>
+                         <button onClick={() => handleDeleteRoom(room._id, room.name)} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-500 hover:text-white transition-all">🗑️</button>
+                       </div>
+                     )}
+                     <span className={`text-[9px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest border ${room.status === 'available' ? "bg-green-50 text-green-600 border-green-100" : "bg-red-50 text-red-600 border-red-100"}`}>
+                       {room.status}
+                     </span>
+                     {isOccupied && <span className="text-[8px] font-black bg-amber-500 text-white px-3 py-1 rounded-lg uppercase italic animate-pulse shadow-md">Occupied Now</span>}
+                   </div>
+                </div>
+
+                <h3 className="text-3xl font-black text-gray-900 mb-2 uppercase tracking-tighter italic leading-none">{room.name}</h3>
+                <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest mb-10 italic">Cap: {room.capacity} Persons</p>
+                <button onClick={() => setSelectedRoom(room)} className="w-full py-5 bg-gray-900 text-white rounded-[25px] font-black shadow-xl hover:bg-blue-600 transition-all active:scale-95 uppercase text-[11px] tracking-[0.2em] italic text-white">Book Space</button>
               </div>
-              <h3 className="text-2xl font-black text-gray-800 mb-2 uppercase tracking-tighter">{room.name}</h3>
-              <p className="text-gray-400 text-sm font-medium mb-6">Max Capacity: {room.capacity} Persons</p>
-              <button 
-                disabled={room.status !== 'Available'}
-                onClick={() => setSelectedRoom(room)}
-                className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black shadow-lg hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 transition-all active:scale-95 uppercase tracking-widest"
-              >
-                BOOK NOW
-              </button>
-            </div>
-          ))}
+             );
+           })}
         </div>
       ) : (
-        <div className="bg-white rounded-[40px] border border-gray-100 overflow-hidden shadow-sm">
+        <div className="bg-white rounded-[50px] border border-gray-100 overflow-hidden shadow-2xl shadow-blue-900/5 text-black">
           <table className="w-full text-left">
-            <thead className="bg-gray-50/50 border-b">
-              <tr className="text-gray-400 text-[10px] uppercase font-black tracking-[0.2em]">
-                <th className="px-8 py-6">Room Name</th>
-                <th className="px-8 py-6">Date</th>
-                <th className="px-8 py-6">Time Slot</th>
-                <th className="px-8 py-6 text-center">Actions</th>
+            <thead>
+              <tr className="bg-gray-50/50 text-gray-400 text-[10px] uppercase font-black italic tracking-[0.2em]">
+                <th className="px-10 py-8">Meeting / Room</th>
+                <th className="px-10 py-8">Organized By</th>
+                <th className="px-10 py-8">Time Slot</th>
+                <th className="px-10 py-8 text-center">Manage</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {myBookings.length > 0 ? myBookings.map((item) => (
-                <tr key={item.id} className="hover:bg-blue-50/10 transition-colors">
-                  <td className="px-8 py-5 font-bold text-gray-800">{item.room_name}</td>
-                  <td className="px-8 py-5 text-gray-500 font-medium">{item.date}</td>
-                  <td className="px-8 py-5 text-blue-600 font-black">{item.start_time} - {item.end_time}</td>
-                  <td className="px-8 py-5 text-center">
-                    <button 
-                      onClick={() => handleCancelBooking(item.id)}
-                      className="px-4 py-2 bg-red-50 text-red-600 rounded-xl text-[10px] font-black uppercase hover:bg-red-600 hover:text-white transition-all tracking-widest"
-                    >
-                      Cancel
-                    </button>
-                  </td>
-                </tr>
-              )) : (
-                <tr>
-                  <td colSpan={4} className="px-8 py-20 text-center text-gray-400 italic">ไม่พบข้อมูลประวัติการจอง</td>
-                </tr>
-              )}
+              {(activeTab === "history" ? filteredAllHistory : filteredMyHistory).map((item) => {
+                const bookingOwnerId = String(item.userId?._id || item.userId || "");
+                const currentUserId = String(currentUser?._id || currentUser?.id || "");
+                const isOwner = currentUserId !== "" && bookingOwnerId === currentUserId;
+                const canCancel = isAdmin || isOwner;
+
+                return (
+                  <tr key={item._id} className="hover:bg-blue-50/20 transition-colors group text-black">
+                    <td className="px-10 py-6">
+                      <div className="font-black text-blue-900 uppercase italic text-sm leading-tight text-black">{item.title}</div>
+                      <div className="text-[10px] text-gray-400 font-bold mt-1 uppercase tracking-widest text-black italic">ROOM: {item.roomId?.name || 'N/A'}</div>
+                    </td>
+                    <td className="px-10 py-6">
+                       <span className="text-xs font-black text-gray-700 uppercase text-black italic">{item.userId?.full_name || 'System User'}</span>
+                       {isOwner && <span className="ml-2 text-[8px] bg-blue-900 text-white px-2 py-0.5 rounded-md font-black italic shadow-sm">YOU</span>}
+                    </td>
+                    <td className="px-10 py-6 text-black font-bold">
+                      <div className="text-xs font-black text-gray-600 italic">{new Date(item.startTime).toLocaleDateString('th-TH')}</div>
+                      <div className="text-[10px] text-blue-500 font-black italic mt-1 bg-blue-50 w-fit px-2 py-0.5 rounded border border-blue-100">{new Date(item.startTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - {new Date(item.endTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                    </td>
+                    <td className="px-10 py-6 text-center">
+                      {canCancel && item.status !== 'CANCELLED' ? (
+                        <button onClick={() => handleCancelBooking(item._id, item.title)} className="px-8 py-2.5 bg-red-50 text-red-600 rounded-xl text-[10px] font-black uppercase hover:bg-red-600 hover:text-white transition-all shadow-sm italic shadow-inner active:scale-95">Cancel</button>
+                      ) : (
+                        <span className="text-[9px] text-gray-300 font-black uppercase italic tracking-widest border border-dashed border-gray-200 px-4 py-2 rounded-xl block">
+                          {item.status === 'CANCELLED' ? 'Inactive' : 'View Only'}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
+          {(activeTab === "history" ? filteredAllHistory : filteredMyHistory).length === 0 && (
+              <div className="py-20 text-center text-gray-300 font-black italic uppercase tracking-widest opacity-40">No activity found</div>
+          )}
         </div>
       )}
 
-      {selectedRoom && (
-        <BookingForm 
-          room={selectedRoom} 
-          onClose={() => setSelectedRoom(null)} 
-          onRefresh={() => { fetchRooms(); fetchMyHistory(); }} 
+      {selectedRoom && <BookingForm room={selectedRoom} onClose={() => setSelectedRoom(null)} onRefresh={() => { fetchRooms(); fetchAllHistory(); fetchMyHistory(); }} />}
+      
+      {/* ✅ Modal สำหรับจัดการห้องประชุม (Create/Edit) */}
+      {isRoomModalOpen && (
+        <RoomManageModal 
+          editingRoom={editingRoom} 
+          onClose={() => setIsRoomModalOpen(false)} 
+          onRefresh={fetchRooms} 
         />
       )}
     </div>

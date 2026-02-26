@@ -87,7 +87,7 @@ function AddEmployeeModal({ onClose, onRefresh, userRole }: { onClose: () => voi
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[110] p-4 text-black animate-in fade-in duration-300">
       <div className="bg-white w-full max-w-xl rounded-[45px] p-10 shadow-2xl border border-gray-100 max-h-[90vh] overflow-y-auto">
         <h2 className="text-3xl font-black text-blue-900 mb-2 italic uppercase tracking-tighter leading-none">New Member</h2>
-        <p className="text-gray-400 text-[10px] mb-8 font-black uppercase tracking-widest italic">เพิ่มสมาชิกใหม่ตามขอบเขตสิทธิ์ของคุณ</p>
+        <p className="text-gray-400 text-[10px] mb-8 font-black uppercase tracking-widest italic">เพิ่มสมาชิกใหม่</p>
         
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -136,7 +136,7 @@ function AddEmployeeModal({ onClose, onRefresh, userRole }: { onClose: () => voi
               value={formData.role}
               className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold bg-white text-black cursor-pointer"
               onChange={e => setFormData({...formData, role: e.target.value})}
-            >
+            > 
               <option value="EMPLOYEE">EMPLOYEE</option>
               <option value="MANAGER">MANAGER</option>
               {isAdmin && <option value="HR">HR</option>}
@@ -187,10 +187,7 @@ export default function DashboardPage() {
           {canAddEmployee && (
             <button 
               onClick={() => setShowAddForm(true)}
-              className="bg-blue-900 text-white px-8 py-5 rounded-[25px] font-black shadow-2xl shadow-blue-100 hover:bg-black transition-all uppercase text-[10px] tracking-[0.2em] active:scale-95 flex items-center gap-3 group"
-            >
-              <span className="text-lg group-hover:rotate-90 transition-transform duration-500">+</span>
-              Add Employee
+              className="bg-blue-900 text-white px-8 py-4 rounded-[25px] font-black shadow-xl hover:bg-black transition-all active:scale-95 uppercase text-[10px] tracking-widest">Add Employee
             </button>
           )}
         </div>

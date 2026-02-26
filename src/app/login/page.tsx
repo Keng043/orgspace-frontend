@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Cookies from 'js-cookie';
+import Swal from 'sweetalert2';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,13 +14,60 @@ export default function LoginPage() {
 
   const API_BASE = 'http://192.168.10.101:3000/api/auth';
 
+  // ✅ ฟังก์ชันส่งคำขอรีเซ็ตรหัสผ่านไปยัง Admin
+  const handleForgotPassword = async () => {
+    const { value: targetId } = await Swal.fire({
+      title: 'PASSWORD RESET REQUEST',
+      text: 'กรุณากรอก User ID ของคุณเพื่อส่งคำขอไปยังผู้ดูแลระบบ',
+      input: 'text',
+      inputPlaceholder: 'ENTER YOUR ID',
+      showCancelButton: true,
+      confirmButtonText: 'SEND REQUEST',
+      confirmButtonColor: '#2563EB',
+      customClass: {
+        popup: 'rounded-[35px] font-sans italic',
+        title: 'font-black uppercase tracking-tighter text-blue-900',
+        input: 'rounded-2xl border-gray-100 shadow-inner font-bold'
+      }
+    });
+
+    if (targetId) {
+      try {
+        const res = await fetch(`${API_BASE}/request-reset`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: targetId }),
+        });
+
+        if (res.ok) {
+          Swal.fire({
+            icon: 'success',
+            title: 'SENT SUCCESSFUL',
+            text: 'ส่งคำขอเรียบร้อยแล้ว กรุณารอ Admin อนุมัติคำขอของคุณ',
+            confirmButtonColor: '#2563EB',
+            customClass: { popup: 'rounded-[35px]' }
+          });
+        } else {
+          throw new Error('ระบบมีคำขอค้างอยู่แล้ว');
+        }
+      } catch (err: any) {
+        Swal.fire({
+          icon: 'error',
+          title: 'ERROR',
+          text: err.message,
+          confirmButtonColor: '#1E3A8A',
+          customClass: { popup: 'rounded-[35px]' }
+        });
+      }
+    }
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
     try {
-      // 🧨 ล้างข้อมูลเก่าก่อนเข้าสู่ระบบใหม่
       Cookies.remove('access_token', { path: '/' });
       Cookies.remove('user_role', { path: '/' });
       Cookies.remove('user_name', { path: '/' });
@@ -34,10 +82,8 @@ export default function LoginPage() {
       
       if (!res.ok) throw new Error(data.message || 'ID หรือรหัสผ่านไม่ถูกต้อง');
 
-      // ✅ 1. บันทึก Access Token
       Cookies.set('access_token', data.accessToken, { expires: 1, path: '/' });
       
-      // ✅ 2. ถอดรหัส JWT เพื่อเก็บข้อมูลเบื้องต้น
       try {
         const payload = JSON.parse(window.atob(data.accessToken.split('.')[1]));
         const actualName = payload.full_name || payload.name;
@@ -49,7 +95,6 @@ export default function LoginPage() {
         console.error("Token decoding failed:", decodeError);
       }
       
-      // 🚀 เข้าสู่หน้า Dashboard
       router.push('/orgspace/dashboard');
     } catch (err: any) {
       setError(err.message || 'ไม่สามารถเข้าสู่ระบบได้');
@@ -62,7 +107,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-blue-50/30 p-4 font-sans text-black animate-in fade-in duration-1000">
       <div className="bg-white w-full max-w-4xl rounded-[50px] shadow-[0_20px_70px_-10px_rgba(0,0,0,0.1)] overflow-hidden flex min-h-[600px] border border-gray-50 italic">
         
-        {/* ส่วนฟอร์ม Login */}
+        {/* Form Section */}
         <div className="w-full md:w-1/2 p-12 md:p-16 flex flex-col justify-center">
           <div className="mb-10">
             <h2 className="text-[45px] font-black text-blue-600 uppercase tracking-tighter leading-none italic">Login</h2>
@@ -77,7 +122,7 @@ export default function LoginPage() {
                 placeholder="Enter your ID" 
                 value={userId} 
                 onChange={(e) => setUserId(e.target.value)} 
-                className="w-full p-5 bg-gray-50 border border-gray-100 rounded-[25px] outline-none font-bold shadow-inner focus:ring-2 focus:ring-blue-400 transition-all" 
+                className="w-full p-5 bg-gray-50 border border-gray-100 rounded-[25px] outline-none font-bold shadow-inner focus:ring-2 focus:ring-blue-400 transition-all text-black" 
                 required 
               />
             </div>
@@ -90,7 +135,7 @@ export default function LoginPage() {
                   placeholder="••••••••" 
                   value={password} 
                   onChange={(e) => setPassword(e.target.value)} 
-                  className="w-full p-5 bg-gray-50 border border-gray-100 rounded-[25px] outline-none font-bold shadow-inner focus:ring-2 focus:ring-blue-400 transition-all" 
+                  className="w-full p-5 bg-gray-50 border border-gray-100 rounded-[25px] outline-none font-bold shadow-inner focus:ring-2 focus:ring-blue-400 transition-all text-black" 
                   required 
                 />
                 <button 
@@ -99,6 +144,16 @@ export default function LoginPage() {
                   className="absolute right-5 top-1/2 -translate-y-1/2 text-[10px] font-black text-blue-400 uppercase tracking-tighter hover:text-blue-600"
                 >
                   {showPassword ? "Hide" : "Show"}
+                </button>
+              </div>
+              
+              <div className="flex justify-end mt-3">
+                <button 
+                  type="button"
+                  onClick={handleForgotPassword}
+                  className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic hover:text-blue-600 transition-colors"
+                >
+                  Forgot Password?
                 </button>
               </div>
             </div>
@@ -116,16 +171,15 @@ export default function LoginPage() {
             > 
               {loading ? "AUTHENTICATING..." : "SIGN IN TO SYSTEM"} 
             </button>
-            
           </form>
         </div>
 
-        {/* ส่วน Brand Decor (ฝั่งขวา) */}
-        <div className="hidden md:flex w-1/2 bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 items-center justify-center p-12 text-white relative overflow-hidden">
+        {/* Decoration Section (ส่วนที่ Error ตะกี้ แก้ไขปิด String ให้เรียบร้อยแล้ว) */}
+        <div className="hidden md:flex w-1/2 bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 items-center justify-center p-12 text-white relative overflow-hidden text-center">
           <div className="absolute top-[-10%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
           <div className="absolute bottom-[-10%] left-[-10%] w-48 h-48 bg-blue-400/20 rounded-full blur-2xl"></div>
-          <div className="z-10 flex flex-col items-center text-center">
-            <span className="font-black text-7xl tracking-tighter drop-shadow-2xl italic">ORGSPACE</span>
+          <div className="z-10 flex flex-col items-center">
+            <span className="font-black text-7xl tracking-tighter drop-shadow-2xl italic uppercase leading-none">ORGSPACE</span>
             <div className="h-1.5 w-24 bg-white mt-4 rounded-full shadow-lg"></div>
             <p className="text-[10px] font-black uppercase tracking-[0.5em] mt-6 opacity-70 italic">Management Solution</p>
           </div>

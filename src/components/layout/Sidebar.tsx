@@ -40,6 +40,11 @@ export default function Sidebar() {
       path: "/orgspace/departments",
       roles: ["ADMIN", "HR"], 
     },
+    {
+      name: "log",
+      path: "/audit-logs",
+      roles: ["ADMIN"], // 🛡️ เฉพาะ ADMIN เท่านั้นที่เห็น
+    },
   ];
 
   const handleLogout = () => {
