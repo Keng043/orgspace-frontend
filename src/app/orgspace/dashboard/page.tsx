@@ -7,6 +7,9 @@ import UnifiedDashboard from '@/components/dashboard/UnifiedDashboard';
 
 // --- ➕ คอมโพเนนต์ Modal สำหรับสร้างพนักงานใหม่ ---
 function AddEmployeeModal({ onClose, onRefresh, userRole }: { onClose: () => void, onRefresh: () => void, userRole: string }) {
+  const [departmentList, setDepartmentList] = useState<any[]>([]); // ✅ สำหรับเก็บรายชื่อแผนกจาก API
+  const [loadingDepts, setLoadingDepts] = useState(true);
+  
   const [formData, setFormData] = useState({
     userId: '',
     full_name: '',
@@ -14,41 +17,68 @@ function AddEmployeeModal({ onClose, onRefresh, userRole }: { onClose: () => voi
     salary: '',
     role: 'EMPLOYEE',
     position: '',
-    departments: '', // ✅ เปลี่ยนจาก department (ID) เป็นชื่อแผนกแทน
+    departmentId: '', // ✅ ใช้ departmentId ให้ตรงกับ Dropdown
   });
 
   const isAdmin = userRole === 'ADMIN';
   const API_BASE_URL = 'http://192.168.10.101:3000/api'; 
 
+// ✅ ดึงข้อมูลแผนกจาก API (รูปแบบเดียวกับ EditEmployeeModal)
+  useEffect(() => {
+    const fetchDepts = async () => {
+      try {
+        const token = Cookies.get("access_token");
+        const res = await fetch(`${API_BASE_URL}/departments`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setDepartmentList(Array.isArray(data) ? data : data.data || []);
+        }
+      } catch (err) {
+        console.error("Fetch Dept Error:", err);
+      } finally {
+        setLoadingDepts(false);
+      }
+    };
+    fetchDepts();
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const token = Cookies.get('access_token');
     
-    // 🛡️ ถอดการเช็คความยาว 24 ตัวอักษรออก และเช็คแค่ว่ากรอกข้อมูลมาหรือไม่
-    if (!formData.departments.trim()) {
+    if (!formData.departmentId) {
       return Swal.fire({
         icon: 'warning',
         title: 'ข้อมูลไม่ครบถ้วน',
-        text: 'กรุณาระบุชื่อแผนกที่พนักงานสังกัด',
+        text: 'กรุณาเลือกแผนกที่พนักงานสังกัด',
         confirmButtonColor: '#1E3A8A'
       });
     }
+// ✅ เพิ่ม Logic ค้นหา "ชื่อแผนก" จาก ID ที่เลือก
+    const selectedDept = departmentList.find(d => d._id === formData.departmentId);
+    const departmentName = selectedDept ? selectedDept.name : '';
 
     try {
-      // ✅ แยกค่า departments ออกมาเพื่อแปลงชื่อคีย์ก่อนส่ง
-      const { departments, ...restData } = formData;
+      // ✅ ปรับ Payload ส่งเป็นชื่อแผนก (String) ตามที่ Backend ต้องการ
+      const payload = {
+        userId: formData.userId,
+        full_name: formData.full_name,
+        password: formData.password,
+        salary: Number(formData.salary),
+        role: formData.role,
+        position: formData.position,
+        department: departmentName // 🔄 เปลี่ยนจากส่ง ID เป็นส่ง "ชื่อแผนก"
+      };
 
-      const response = await fetch(`${API_BASE_URL}/users`, {
+      const response = await fetch(`${API_BASE_URL}/users`, { 
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ 
-          ...restData, 
-          salary: Number(formData.salary),
-          department: departments // 🔄 ส่งค่าจาก 'departments' เข้าไปในฟิลด์ 'department' (ที่ Backend รอรับ)
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (response.ok) {
@@ -93,12 +123,12 @@ function AddEmployeeModal({ onClose, onRefresh, userRole }: { onClose: () => voi
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="text-[10px] font-black text-gray-400 uppercase ml-2 tracking-widest">User ID (Username)</label>
-              <input required type="text" placeholder="เช่น EMP001" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold focus:ring-2 ring-blue-500 text-black transition-all"
+              <input required type="text" placeholder="เช่น EMP001" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold focus:ring-2 ring-blue-50 text-black transition-all"
                 onChange={e => setFormData({...formData, userId: e.target.value})} />
             </div>
             <div>
               <label className="text-[10px] font-black text-gray-400 uppercase ml-2 tracking-widest">Full Name</label>
-              <input required type="text" placeholder="ชื่อ-นามสกุล" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold focus:ring-2 ring-blue-500 text-black transition-all"
+              <input required type="text" placeholder="ชื่อ-นามสกุล" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold focus:ring-2 ring-blue-50 text-black transition-all"
                 onChange={e => setFormData({...formData, full_name: e.target.value})} />
             </div>
           </div>
@@ -106,7 +136,7 @@ function AddEmployeeModal({ onClose, onRefresh, userRole }: { onClose: () => voi
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="text-[10px] font-black text-gray-400 uppercase ml-2 tracking-widest">Password</label>
-              <input required type="password" placeholder="••••••••" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold focus:ring-2 ring-blue-500 text-black transition-all"
+              <input required type="password" placeholder="••••••••" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold focus:ring-2 ring-blue-50 text-black transition-all"
                 onChange={e => setFormData({...formData, password: e.target.value})} />
             </div>
             <div>
@@ -119,14 +149,25 @@ function AddEmployeeModal({ onClose, onRefresh, userRole }: { onClose: () => voi
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="text-[10px] font-black text-gray-400 uppercase ml-2 tracking-widest">Position</label>
-              <input required type="text" placeholder="เช่น Developer" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold focus:ring-2 ring-blue-500 text-black transition-all"
+              <input required type="text" placeholder="เช่น Developer" className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold focus:ring-2 ring-blue-50 text-black transition-all"
                 onChange={e => setFormData({...formData, position: e.target.value})} />
             </div>
             <div>
-              {/* ✅ แก้ไขจุดที่ต้องการ: เปลี่ยนเป็นใส่ชื่อแผนก */}
-              <label className="text-[10px] font-black text-blue-600 uppercase ml-2 tracking-widest underline decoration-blue-200">Department Name</label>
-              <input required type="text" placeholder="เช่น Marketing, IT" className="w-full p-4 bg-blue-50 border border-blue-100 rounded-2xl outline-none font-bold focus:ring-2 ring-blue-500 text-black transition-all"
-                onChange={e => setFormData({...formData, departments: e.target.value})} />
+              {/* ✅ เปลี่ยนเป็น Dropdown แผนก ตามรูปแบบ EditEmployeeModal */}
+              <label className="text-[10px] font-black text-blue-600 uppercase ml-2 tracking-widest underline decoration-blue-200">Department</label>
+              <select 
+                required 
+                className="w-full p-4 bg-blue-50 border border-blue-100 rounded-2xl outline-none font-bold focus:ring-2 ring-blue-500 text-black cursor-pointer transition-all"
+                value={formData.departmentId}
+                onChange={e => setFormData({...formData, departmentId: e.target.value})}
+              >
+                <option value="">{loadingDepts ? "Loading..." : "เลือกแผนก"}</option>
+                {departmentList.map((dept: any) => (
+                  <option key={dept._id} value={dept._id}>
+                    {dept.name}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
@@ -144,17 +185,17 @@ function AddEmployeeModal({ onClose, onRefresh, userRole }: { onClose: () => voi
           </div>
 
           <div className="flex gap-4 pt-6">
-            <button type="button" onClick={onClose} className="flex-1 py-4 font-black text-gray-300 hover:text-gray-500 uppercase text-[10px] tracking-widest transition-colors">Cancel</button>
+            <button type="button" onClick={onClose} className="flex-1 py-4 bg-gray-900 text-white font-black rounded-3xl shadow-xl uppercase text-[10px] tracking-[0.2em] active:scale-95 transition-all shadow-blue-100">Cancel</button>
             <button type="submit" className="flex-1 py-4 bg-blue-900 text-white font-black rounded-3xl shadow-xl uppercase text-[10px] tracking-[0.2em] active:scale-95 transition-all shadow-blue-100">Confirm & Create</button>
           </div>
         </form>
       </div>
     </div>
   );
-}
+} 
 
-// --- DashboardPage Component คงเดิมแต่ปรับปรุงสไตล์เล็กน้อย ---
-export default function DashboardPage() {
+// --- DashboardPage Component ---
+export default function DashboardPage() { 
   const [userRole, setUserRole] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
 

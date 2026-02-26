@@ -25,12 +25,6 @@ export default function Sidebar() {
       roles: ["ADMIN", "HR", "MANAGER", "EMPLOYEE"], // ทุกคนเข้าหน้านี้ได้
     },
     {
-      name: "รายงานภาพรวม",
-      path: "/orgspace/reports",
-      // ✅ เฉพาะ ADMIN เท่านั้นที่เห็นเมนูรายงานผล
-      roles: ["ADMIN","HR"], 
-    },
-    {
       name: "จองห้องประชุม",
       path: "/booking",
       roles: ["ADMIN", "HR", "MANAGER", "EMPLOYEE"], // เมนูทั่วไปที่ทุกคนเห็น
@@ -38,17 +32,21 @@ export default function Sidebar() {
     {
       name: "จัดการแผนก",
       path: "/orgspace/departments",
-      roles: ["ADMIN", "HR"], 
+      roles: ["ADMIN","HR"],
+    },
+    {
+      name: "รายงานภาพรวม",
+      path: "/orgspace/reports",
+      roles: ["ADMIN","HR"], 
     },
     {
       name: "log",
       path: "/audit-logs",
-      roles: ["ADMIN"], // 🛡️ เฉพาะ ADMIN เท่านั้นที่เห็น
+      roles: ["ADMIN"],
     },
   ];
 
   const handleLogout = () => {
-    // 🧹 ล้างคุกกี้ทั้งหมดเมื่อออกจากระบบ
     Cookies.remove('user_role');
     Cookies.remove('access_token');
     window.location.href = "/login";

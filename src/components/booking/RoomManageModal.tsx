@@ -4,9 +4,9 @@ import Cookies from 'js-cookie';
 import Swal from 'sweetalert2';
 
 export default function RoomManageModal({ editingRoom, onClose, onRefresh }: any) {
+  // ✅ 1. formData ไม่มี roomNumber แล้ว
   const [formData, setFormData] = useState({
     name: '',
-    roomNumber: '',
     capacity: '',
     status: 'Available'
   });
@@ -14,12 +14,11 @@ export default function RoomManageModal({ editingRoom, onClose, onRefresh }: any
   const API_BASE = 'http://192.168.10.101:3000/api';
   const token = Cookies.get('access_token');
 
-  // 📝 ถ้าเป็นการแก้ไข ให้ดึงข้อมูลเดิมมาใส่ใน Form
+  // 📝 ดึงข้อมูลเดิมมาใส่ (ตัด roomNumber ออก)
   useEffect(() => {
     if (editingRoom) {
       setFormData({
         name: editingRoom.name || '',
-        roomNumber: editingRoom.roomNumber || '',
         capacity: editingRoom.capacity || '',
         status: editingRoom.status || 'Available'
       });
@@ -29,21 +28,23 @@ export default function RoomManageModal({ editingRoom, onClose, onRefresh }: any
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const method = editingRoom ? 'PUT' : 'POST';
+    const method = editingRoom ? 'PATCH' : 'POST';
+    const roomId = editingRoom?._id || editingRoom?.id;
     const url = editingRoom 
-      ? `${API_BASE}/rooms/${editingRoom._id || editingRoom.id}` 
+      ? `${API_BASE}/rooms/${roomId}` 
       : `${API_BASE}/rooms`;
 
     try {
       const res = await fetch(url, {
-        method,
+        method: method, // ใช้ตัวแปร method ให้ถูกต้อง
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          ...formData,
-          capacity: Number(formData.capacity) // แปลงเป็นตัวเลขก่อนส่ง
+          name: formData.name,
+          capacity: Number(formData.capacity),
+          // ❌ ลบ status: formData.status ออก เพราะ Backend ไม่รับค่านี้
         }),
       });
 
@@ -51,7 +52,7 @@ export default function RoomManageModal({ editingRoom, onClose, onRefresh }: any
         Swal.fire({
           icon: 'success',
           title: editingRoom ? 'Updated!' : 'Created!',
-          text: `ห้องประชุมถูกบันทึกเรียบร้อยแล้ว`,
+          text: `บันทึกข้อมูลเรียบร้อยแล้ว`,
           timer: 1500,
           showConfirmButton: false,
           customClass: { popup: 'rounded-[30px]' }
@@ -60,7 +61,12 @@ export default function RoomManageModal({ editingRoom, onClose, onRefresh }: any
         onClose();
       } else {
         const errData = await res.json();
-        Swal.fire({ icon: 'error', title: 'ล้มเหลว', text: errData.message });
+        // 💡 ถ้าล้มเหลวอีก ให้ดู Error Message ที่นี่
+        Swal.fire({ 
+          icon: 'error', 
+          title: 'ล้มเหลว', 
+          text: Array.isArray(errData.message) ? errData.message.join(', ') : errData.message 
+        });
       }
     } catch (err) {
       Swal.fire({ icon: 'error', title: 'Error', text: 'ไม่สามารถติดต่อเซิร์ฟเวอร์ได้' });
@@ -90,59 +96,32 @@ export default function RoomManageModal({ editingRoom, onClose, onRefresh }: any
               required
               type="text" 
               placeholder="เช่น Diamond Ballroom"
-              className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold text-sm focus:ring-4 ring-blue-500/10 transition-all"
+              className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold text-sm focus:ring-4 ring-blue-50/10 transition-all"
               value={formData.name}
               onChange={e => setFormData({...formData, name: e.target.value})}
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            {/* Room Number */}
-            <div>
-              <label className="text-[10px] font-black text-gray-400 uppercase ml-2 mb-1 block italic tracking-widest">Room Number</label>
-              <input 
-                required
-                type="text" 
-                placeholder="R101"
-                className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold text-sm focus:ring-4 ring-blue-500/10 transition-all"
-                value={formData.roomNumber}
-                onChange={e => setFormData({...formData, roomNumber: e.target.value})}
-              />
-            </div>
-            {/* Capacity */}
-            <div>
-              <label className="text-[10px] font-black text-gray-400 uppercase ml-2 mb-1 block italic tracking-widest">Capacity</label>
-              <input 
-                required
-                type="number" 
-                placeholder="10"
-                className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold text-sm focus:ring-4 ring-blue-500/10 transition-all"
-                value={formData.capacity}
-                onChange={e => setFormData({...formData, capacity: e.target.value})}
-              />
-            </div>
-          </div>
-
-          {/* Status Select */}
+          {/* Capacity (ปรับให้เต็มแถวแทน Room Number ที่หายไป) */}
           <div>
-            <label className="text-[10px] font-black text-gray-400 uppercase ml-2 mb-1 block italic tracking-widest">Initial Status</label>
-            <select 
-              className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold text-sm focus:ring-4 ring-blue-500/10 transition-all appearance-none cursor-pointer"
-              value={formData.status}
-              onChange={e => setFormData({...formData, status: e.target.value})}
-            >
-              <option value="Available">🟢 Available</option>
-              <option value="Occupied">🔴 Occupied</option>
-              <option value="Maintenance">🛠 Maintenance</option>
-            </select>
+            <label className="text-[10px] font-black text-gray-400 uppercase ml-2 mb-1 block italic tracking-widest">Capacity (Persons)</label>
+            <input 
+              required
+              type="number" 
+              placeholder="ระบุจำนวนคน"
+              className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold text-sm focus:ring-4 ring-blue-50/10 transition-all"
+              value={formData.capacity}
+              onChange={e => setFormData({...formData, capacity: e.target.value})}
+            />
           </div>
+          
 
           {/* Action Buttons */}
           <div className="flex gap-4 pt-6">
             <button 
               type="button" 
               onClick={onClose} 
-              className="flex-1 py-4 font-black text-gray-300 hover:text-gray-500 uppercase text-[10px] tracking-widest transition-colors italic"
+              className="flex-1 py-5 bg-blue-900 text-white font-black rounded-[25px] shadow-xl shadow-blue-100 hover:bg-black transition-all active:scale-95 uppercase text-[10px] tracking-[0.2em]"
             >
               Cancel
             </button>

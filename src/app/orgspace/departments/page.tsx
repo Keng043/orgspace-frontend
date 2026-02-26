@@ -11,11 +11,12 @@ export default function DepartmentsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDept, setEditingDept] = useState<any>(null);
   
-  // 🔍 Filter & Sort States
+  // ✅ ตรวจสอบสิทธิ์ (Admin เท่านั้นที่จัดการได้)
+  const userRole = Cookies.get("user_role")?.toUpperCase();
+  const isAdmin = userRole === "ADMIN";
+
   const [searchTerm, setSearchTerm] = useState("");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
-
-  // 📝 Form States
   const [deptName, setDeptName] = useState("");
   const [description, setDescription] = useState("");
 
@@ -40,7 +41,6 @@ export default function DepartmentsPage() {
     fetchDepartments();
   }, []);
 
-  // 🧪 Logic การกรองและเรียงลำดับข้อมูล
   const filteredAndSortedDepts = useMemo(() => {
     let result = departments.filter((dept) =>
       dept.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -57,6 +57,8 @@ export default function DepartmentsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAdmin) return; // 🛡️ กันเหนียวกรณี HR พยายามส่ง Form
+
     if (!description.trim()) return Swal.fire({ icon: "warning", title: "กรุณาระบุรายละเอียดแผนก" });
     if (description.length < 10) return Swal.fire({ icon: "warning", title: "รายละเอียดต้องมีความยาวอย่างน้อย 10 ตัวอักษร" });
     
@@ -94,6 +96,8 @@ export default function DepartmentsPage() {
   };
 
   const handleDelete = async (id: string, name: string) => {
+    if (!isAdmin) return; // 🛡️ กันเหนียว
+
     const result = await Swal.fire({
       title: "ลบแผนก?",
       text: `ยืนยันการลบแผนก "${name}"?`,
@@ -101,6 +105,7 @@ export default function DepartmentsPage() {
       showCancelButton: true,
       confirmButtonColor: "#EF4444",
       confirmButtonText: "ลบทันที",
+      customClass: { popup: "rounded-[35px]" }
     });
 
     if (result.isConfirmed) {
@@ -109,31 +114,44 @@ export default function DepartmentsPage() {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
         });
+
         if (res.ok) {
-          Swal.fire("ลบสำเร็จ!", "", "success");
+          Swal.fire({ icon: "success", title: "ลบสำเร็จ!", timer: 1500, showConfirmButton: false, customClass: { popup: "rounded-[35px]" } });
           fetchDepartments();
+        } else {
+          const errData = await res.json();
+          if (res.status === 400 || errData.message?.toLowerCase().includes("employee")) {
+            Swal.fire({ icon: "error", title: "ไม่สามารถลบแผนกได้!", text: `แผนก "${name}" ยังมีพนักงานสังกัดอยู่`, confirmButtonColor: "#1E3A8A", customClass: { popup: "rounded-[35px]" } });
+          } else {
+            Swal.fire({ icon: "error", title: "ไม่สำเร็จ", text: errData.message || "เกิดข้อผิดพลาดในการลบ", confirmButtonColor: "#1E3A8A", customClass: { popup: "rounded-[35px]" } });
+          }
         }
-      } catch (err) { Swal.fire("Error", "ไม่สามารถลบได้", "error"); }
+      } catch (err) { 
+        Swal.fire({ icon: "error", title: "Error", text: "ไม่สามารถติดต่อเซิร์ฟเวอร์ได้", confirmButtonColor: "#1E3A8A", customClass: { popup: "rounded-[35px]" } });
+      }
     }
   };
 
   return (
     <div className="p-8 max-w-6xl mx-auto text-black animate-in fade-in duration-700 bg-[#F8FAFC] min-h-screen font-sans">
       
-      {/* Header Section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4">
         <div>
           <h1 className="text-4xl font-black text-blue-900 italic uppercase tracking-tighter">Departments</h1>
           <p className="text-gray-400 text-[10px] font-black uppercase tracking-widest mt-1 italic">จัดการโครงสร้างและรายละเอียดแผนก</p>
         </div>
-        <button
-          onClick={() => { resetForm(); setIsModalOpen(true); }}
-          className="bg-blue-900 text-white px-8 py-4 rounded-[25px] font-black shadow-xl hover:bg-black transition-all active:scale-95 uppercase text-[10px] tracking-widest"
->Add New Department
-        </button>
+        
+        {/* ✅ แสดงปุ่ม Add เฉพาะ Admin เท่านั้น */}
+        {isAdmin && (
+          <button
+            onClick={() => { resetForm(); setIsModalOpen(true); }}
+            className="bg-blue-900 text-white px-8 py-4 rounded-[25px] font-black shadow-xl hover:bg-black transition-all active:scale-95 uppercase text-[10px] tracking-widest"
+          >
+            Add New Department
+          </button>
+        )}
       </div>
 
-      {/* 🔍 Filter & Sort Bar */}
       <div className="bg-white p-6 rounded-[35px] border border-gray-100 shadow-sm mb-8 flex flex-col md:flex-row gap-4 items-center">
         <div className="relative flex-1 w-full">
           <span className="absolute left-4 top-1/2 -translate-y-1/2 opacity-30 text-xs">🔍</span>
@@ -147,14 +165,14 @@ export default function DepartmentsPage() {
         </div>
         
         <div className="flex items-center gap-2">
-          <span className="text-[9px] font-black text-gray-300 uppercase italic">Sort by Name:</span>
+          <span className="text-[9px] font-black text-gray-300 uppercase italic">Sort by:</span>
           <button 
             onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
-            className="bg-white border border-gray-100 px-5 py-3 rounded-2xl text-[10px] font-black text-blue-900 shadow-sm hover:bg-blue-50 transition-all flex items-center gap-2"
+            className="bg-blue-600 border-gray-100 px-5 py-3 rounded-2xl text-[10px] font-black text-white transition-all flex items-center gap-2"
           >
             {sortOrder === "asc" ? "ก - ฮ ↑" : "ฮ - ก ↓"}
           </button>
-        </div>
+        </div> 
       </div>
 
       {loading ? (
@@ -166,7 +184,8 @@ export default function DepartmentsPage() {
               <tr className="text-gray-400 text-[10px] uppercase font-black italic tracking-widest">
                 <th className="px-10 py-7">Department Name</th>
                 <th className="px-10 py-7">Detailed Description</th>
-                <th className="px-10 py-7 text-center">Manage</th>
+                {/* ✅ แสดงหัวตาราง Manage เฉพาะ Admin */}
+                {isAdmin && <th className="px-10 py-7 text-center">Manage</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -185,39 +204,38 @@ export default function DepartmentsPage() {
                       {dept.description || "No description provided"}
                     </p>
                   </td>
-                  <td className="px-10 py-6 flex justify-center gap-2">
-                    <button
-                      onClick={() => {
-                        setEditingDept(dept);
-                        setDeptName(dept.name);
-                        setDescription(dept.description || "");
-                        setIsModalOpen(true);
-                      }}
-                      className="bg-blue-100 text-blue-700 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase hover:bg-blue-200 transition-all"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDelete(dept._id, dept.name)}
-                      className="bg-red-50 text-red-600 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase hover:bg-red-600 hover:text-white transition-all shadow-sm"
-                    >
-                      Delete
-                    </button>
-                  </td>
+                  
+                  {/* ✅ แสดงปุ่ม Edit/Delete เฉพาะ Admin เท่านั้น */}
+                  {isAdmin && (
+                    <td className="px-10 py-6 flex justify-center gap-2">
+                      <button
+                        onClick={() => {
+                          setEditingDept(dept);
+                          setDeptName(dept.name);
+                          setDescription(dept.description || "");
+                          setIsModalOpen(true);
+                        }}
+                        className="bg-blue-900 text-white px-5 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-black transition-all active:scale-95 shadow-sm italic shadow-inner"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(dept._id, dept.name)}
+                        className="bg-red-50 text-red-600 px-5 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-red-600 hover:text-white transition-all shadow-sm italic active:scale-95 shadow-inner"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
-              {filteredAndSortedDepts.length === 0 && (
-                <tr>
-                  <td colSpan={3} className="py-20 text-center text-gray-300 font-black italic uppercase tracking-widest text-xs">No departments found</td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>
       )}
 
-      {/* 🟢 Modal สำหรับเพิ่ม/แก้ไข (คงเดิม) */}
-      {isModalOpen && (
+      {/* 🟢 Modal (จะถูกเรียกใช้โดยปุ่มที่ Admin เท่านั้นที่เห็น) */}
+      {isModalOpen && isAdmin && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[110] p-4 animate-in fade-in duration-300">
           <div className="bg-white w-full max-w-md rounded-[45px] p-10 shadow-2xl border border-gray-100 scale-in-center">
             <h2 className="text-2xl font-black text-blue-900 mb-6 italic uppercase tracking-tighter">
@@ -238,15 +256,15 @@ export default function DepartmentsPage() {
                 <p className="text-[9px] text-gray-400 mt-2 ml-2 italic tracking-tight">* ตัวอักษรเท่านั้น และอย่างน้อย 10 ตัวอักษร</p>
               </div>
               <div className="flex gap-4 pt-4">
-                <button type="button" onClick={resetForm} className="flex-1 py-4 font-black text-gray-300 uppercase text-[10px] tracking-widest transition-colors hover:text-gray-500">Cancel</button>
+                <button type="button" onClick={resetForm} className="flex-1 py-4 bg-gray-900 text-white font-black rounded-2xl shadow-xl uppercase text-[10px] tracking-[0.1em] active:scale-95 transition-all">Cancel</button>
                 <button type="submit" className="flex-1 py-4 bg-blue-900 text-white font-black rounded-2xl shadow-xl uppercase text-[10px] tracking-[0.1em] active:scale-95 transition-all">
                   {editingDept ? "Save Changes" : "Confirm Create"}
                 </button>
               </div>
-            </form>
+            </form> 
           </div>
         </div>
-      )}
+      )} 
     </div>
   );
 }

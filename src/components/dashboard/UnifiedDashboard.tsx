@@ -26,6 +26,7 @@ function EditEmployeeModal({ employee, onClose, onRefresh, userRole }: any) {
   const canEditGeneral = isAdmin || isHR || userRole === "EMPLOYEE";
   const canEditSalary = isAdmin || isHR;
   const canEditRole = isAdmin;
+  const isManager = userRole === 'MANAGER'; //เพิ่ม
 
   useEffect(() => {
     const fetchDepts = async () => {
@@ -194,7 +195,7 @@ function EditEmployeeModal({ employee, onClose, onRefresh, userRole }: any) {
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-4 font-black text-gray-300 uppercase text-[10px] tracking-widest"
+              className="flex-1 py-4 bg-black text-white font-black rounded-3xl shadow-xl uppercase text-[10px] tracking-widest active:scale-95 transition-all"
             >
               Cancel
             </button>
@@ -235,9 +236,11 @@ export default function UnifiedDashboard({ userRole }: { userRole: string }) {
 
   const isAdmin = userRole === "ADMIN";
   const isHR = userRole === "HR";
+  const isManager = userRole === "MANAGER";
   const isEmployee = userRole === "EMPLOYEE";
+  
 
-  // ✅ Fetch ข้อมูลพนักงาน และ คำขอรีเซ็ต (แบบปรับปรุงใหม่)
+  // ✅ fetchData — ดึงข้อมูลตามสิทธิ์แต่ละ Role
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -247,33 +250,72 @@ export default function UnifiedDashboard({ userRole }: { userRole: string }) {
         "Content-Type": "application/json",
       };
 
-      // 1. ดึง Profile ตัวเองก่อนเสมอ เพื่อเช็คสิทธิ์ล่าสุด
+      // 1. ดึง Profile ตัวเองก่อนเสมอ
       const profRes = await fetch(`${API_BASE_URL}/users/profile`, { headers });
       if (!profRes.ok) throw new Error("Unauthorized");
       const profData = await profRes.json();
       setCurrentUser(profData);
 
-      // 2. ดึงรายการ User (Admin เห็นทุกคน / User เห็นตัวเอง)
-      const userRes = await fetch(
-        profData.role === "ADMIN"
-          ? `${API_BASE_URL}/users`
-          : `${API_BASE_URL}/users/profile`,
-        { headers },
-      );
-      const userData = await userRes.json();
+      let list: any[] = [];
 
-      // จัดการข้อมูลให้เป็น Array เสมอ
-      let list = Array.isArray(userData)
-        ? userData
-        : userData.data || [userData];
+      if (profData.role === "ADMIN" || profData.role === "HR") {
+        // ✅ ADMIN & HR → ดูได้ทุกคน
+        const userRes = await fetch(`${API_BASE_URL}/users`, { headers });
+        const userData = await userRes.json();
+        list = Array.isArray(userData) ? userData : userData.data || [];
+
+      } else if (profData.role === "MANAGER") {
+        // ✅ MANAGER → ดูตัวเองและพนักงานในแผนกเดียวกัน
+        // ดึงแผนกของตัวเองจาก profile
+        const myDeptId =
+          typeof profData.department === "object"
+            ? profData.department?._id
+            : profData.department;
+
+        if (myDeptId) {
+          // ดึงรายชื่อทุกคนในแผนก (ต้องมี API endpoint นี้บน Backend)
+          const deptRes = await fetch(
+            `${API_BASE_URL}/users?department=${myDeptId}`,
+            { headers }
+          );
+          if (deptRes.ok) {
+            const deptData = await deptRes.json();
+            list = Array.isArray(deptData) ? deptData : deptData.data || [];
+          } else {
+            // Fallback: ถ้า Backend ยังไม่รองรับ query param → กรองฝั่ง client
+            const allRes = await fetch(`${API_BASE_URL}/users`, { headers });
+            if (allRes.ok) {
+              const allData = await allRes.json();
+              const allUsers: any[] = Array.isArray(allData)
+                ? allData
+                : allData.data || [];
+              list = allUsers.filter((u) => {
+                const uDeptId =
+                  typeof u.department === "object"
+                    ? u.department?._id
+                    : u.department;
+                return (
+                  String(uDeptId) === String(myDeptId) ||
+                  String(u._id || u.id) === String(profData._id || profData.id)
+                );
+              });
+            }
+          }
+        } else {
+          // ถ้าไม่มีแผนก → เห็นแค่ตัวเอง
+          list = [profData];
+        }
+
+      } else {
+        // ✅ EMPLOYEE → เห็นแค่ตัวเอง
+        list = [profData];
+      }
+
       setDataList(list);
 
-      // 3. ถ้าเป็น Admin ให้ดึง Reset Requests ที่ค้างอยู่
+      // ดึง Reset Requests เฉพาะ Admin
       if (profData.role === "ADMIN") {
-        const reqRes = await fetch(
-          `${API_BASE_URL}/auth/admin/reset-requests`,
-          { headers },
-        );
+        const reqRes = await fetch(`${API_BASE_URL}/auth/admin/reset-requests`, { headers });
         if (reqRes.ok) {
           setResetRequests(await reqRes.json());
         }
@@ -557,7 +599,7 @@ export default function UnifiedDashboard({ userRole }: { userRole: string }) {
                 Sort by:
               </span>
               {[
-                { id: "full_name", label: "ชื่อ ก-ฮ" },
+                { id: "full_name", label: "ก-ฮ" },
                 { id: "salary", label: "เงินเดือน" },
                 { id: "position", label: "ตำแหน่ง" },
               ].map((btn) => (
@@ -618,7 +660,7 @@ export default function UnifiedDashboard({ userRole }: { userRole: string }) {
                   ? emp.department?.name
                   : emp.department;
               const canEdit = isAdmin
-                ? emp.role !== "ADMIN" || isMe
+                ? emp.role !== "ADMIN"
                 : isHR
                   ? emp.role !== "ADMIN" && emp.role !== "HR"
                   : false;

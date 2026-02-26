@@ -21,7 +21,7 @@ export default function Topbar() {
     // 🏁 ส่วนหัวของแอป - แสดงชื่อและบทบาท พร้อมปุ่มดูโปรไฟล์
     <header className="h-16 bg-white shadow-sm flex items-center justify-between px-8 border-b border-gray-100 relative z-50 text-black">
       <div className="flex items-center gap-2">
-        <span className="text-gray-400 font-medium text-lg italic"> </span>
+        <span className="text-gray-400 font-medium text-lg italic"></span>
         <h2 className="font-black text-lg text-blue-900 italic tracking-tight">
           {}
         </h2>

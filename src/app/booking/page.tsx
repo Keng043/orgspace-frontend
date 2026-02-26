@@ -7,7 +7,6 @@ import RoomManageModal from "@/components/booking/RoomManageModal";
 import Swal from "sweetalert2";
 
 export default function BookingPage() {
-  // ✅ แท็บ: เพิ่ม 'my-history'
   const [activeTab, setActiveTab] = useState<"reserve" | "history" | "my-history">("reserve");
   const [rooms, setRooms] = useState<any[]>([]);
   const [allBookings, setAllBookings] = useState<any[]>([]);
@@ -15,7 +14,6 @@ export default function BookingPage() {
   const [selectedRoom, setSelectedRoom] = useState<any | null>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
   
-  // ✅ เพิ่ม State สำหรับจัดการห้องประชุม (Admin)
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   const [editingRoom, setEditingRoom] = useState<any | null>(null);
 
@@ -23,6 +21,10 @@ export default function BookingPage() {
   const [mounted, setMounted] = useState(false);
   const [roomSearch, setRoomSearch] = useState("");
   const [historySearch, setHistorySearch] = useState("");
+
+  // ✅ 1. เพิ่ม State สำหรับเก็บค่าการกรอง Capacity และ Date
+  const [filterCapacity, setFilterCapacity] = useState<string>(""); 
+  const [filterDate, setFilterDate] = useState<string>(""); 
 
   const API_BASE = "http://192.168.10.101:3000/api";
   const token = Cookies.get("access_token");
@@ -84,7 +86,6 @@ export default function BookingPage() {
     finally { setLoading(false); }
   };
 
-  // ✅ ฟังก์ชันลบห้องสำหรับ Admin
   const handleDeleteRoom = async (id: string, name: string) => {
     const result = await Swal.fire({
       title: "DELETE ROOM?",
@@ -135,9 +136,31 @@ export default function BookingPage() {
     }
   };
 
-  const filteredRooms = useMemo(() => rooms.filter(r => (r.name || "").toLowerCase().includes(roomSearch.toLowerCase())), [rooms, roomSearch]);
-  const filteredAllHistory = useMemo(() => allBookings.filter(b => (b.title || "").toLowerCase().includes(historySearch.toLowerCase())), [allBookings, historySearch]);
-  const filteredMyHistory = useMemo(() => myBookings.filter(b => (b.title || "").toLowerCase().includes(historySearch.toLowerCase())), [myBookings, historySearch]);
+  // ✅ 2. ปรับปรุง filteredRooms ให้กรอง Capacity (ห้องต้องมีความจุมากกว่าหรือเท่ากับค่าที่กรอง)
+  const filteredRooms = useMemo(() => {
+    return rooms.filter(r => {
+      const nameMatch = (r.name || "").toLowerCase().includes(roomSearch.toLowerCase());
+      const capacityMatch = filterCapacity === "" || Number(r.capacity) >= Number(filterCapacity);
+      return nameMatch && capacityMatch;
+    });
+  }, [rooms, roomSearch, filterCapacity]);
+
+  // ✅ 3. ปรับปรุง filteredHistory ให้กรอง วันที่ (เทียบเฉพาะส่วนวันที่ YYYY-MM-DD)
+  const filteredAllHistory = useMemo(() => {
+    return allBookings.filter(b => {
+      const titleMatch = (b.title || "").toLowerCase().includes(historySearch.toLowerCase());
+      const dateMatch = filterDate === "" || b.startTime.startsWith(filterDate);
+      return titleMatch && dateMatch;
+    });
+  }, [allBookings, historySearch, filterDate]);
+
+  const filteredMyHistory = useMemo(() => {
+    return myBookings.filter(b => {
+      const titleMatch = (b.title || "").toLowerCase().includes(historySearch.toLowerCase());
+      const dateMatch = filterDate === "" || b.startTime.startsWith(filterDate);
+      return titleMatch && dateMatch;
+    });
+  }, [myBookings, historySearch, filterDate]);
 
   if (!mounted) return null;
 
@@ -153,36 +176,54 @@ export default function BookingPage() {
           </p>
         </div>
         <div className="flex gap-3">
-          {/* ✅ ปุ่มเพิ่มห้องประชุม (Admin Only) */}
           {isAdmin && (
             <button 
               onClick={() => { setEditingRoom(null); setIsRoomModalOpen(true); }}
-              className="bg-emerald-600 text-white px-8 py-4 rounded-[22px] font-black shadow-lg hover:bg-black transition-all active:scale-95 uppercase text-[10px] tracking-widest italic"
+              className="bg-blue-900 text-white px-8 py-4 rounded-[22px] font-black shadow-xl hover:bg-black transition-all active:scale-95 uppercase text-[10px] tracking-widest italic"
             >
-              + Create Room
+              Create Room
             </button>
           )}
           <button onClick={() => { fetchRooms(); fetchAllHistory(); fetchMyHistory(); }} className="bg-blue-900 text-white px-8 py-4 rounded-[22px] font-black shadow-xl hover:bg-black transition-all active:scale-95 uppercase text-[10px] tracking-widest italic">Sync Data</button>
         </div>
       </div>
 
-      {/* 📑 TABS SECTION */}
+      {/* 📑 TABS SECTION & ADVANCED FILTERS */}
       <div className="flex flex-col md:flex-row justify-between items-center mb-10 gap-6">
         <div className="flex bg-gray-100 p-1.5 rounded-[25px] shadow-inner border border-gray-200/50">
           <button onClick={() => setActiveTab("reserve")} className={`px-10 py-3.5 rounded-[20px] text-[10px] font-black transition-all uppercase italic ${activeTab === "reserve" ? "bg-white text-blue-900 shadow-md" : "text-gray-400"}`}>Available Spaces</button>
           <button onClick={() => setActiveTab("history")} className={`px-10 py-3.5 rounded-[20px] text-[10px] font-black transition-all uppercase italic ${activeTab === "history" ? "bg-white text-blue-900 shadow-md" : "text-gray-400"}`}>Global Schedule</button>
           <button onClick={() => setActiveTab("my-history")} className={`px-10 py-3.5 rounded-[20px] text-[10px] font-black transition-all uppercase italic ${activeTab === "my-history" ? "bg-white text-blue-900 shadow-md" : "text-gray-400"}`}>My History</button>
         </div>
-        <div className="relative w-full md:w-80">
-          <input type="text" placeholder="Search..." className="w-full p-5 pl-14 bg-white border border-gray-100 rounded-[25px] shadow-inner font-bold text-xs italic text-black focus:ring-4 ring-blue-50 outline-none transition-all" value={activeTab === "reserve" ? roomSearch : historySearch} onChange={(e) => activeTab === "reserve" ? setRoomSearch(e.target.value) : setHistorySearch(e.target.value)} />
-          <span className="absolute left-6 top-1/2 -translate-y-1/2 opacity-40">🔍</span>
+
+        {/* ✅ 4. เพิ่มส่วน UI สำหรับ Filter ใหม่ */}
+        <div className="flex flex-wrap gap-3 w-full md:w-auto">
+          {activeTab === "reserve" ? (
+             <input 
+              type="number" 
+              placeholder="👤 Capacity..." 
+              className="p-4 bg-white border border-gray-100 rounded-[20px] shadow-inner font-bold text-xs w-32 outline-none focus:ring-2 ring-blue-100 transition-all" 
+              value={filterCapacity} 
+              onChange={(e) => setFilterCapacity(e.target.value)} 
+             />
+          ) : (
+            <input 
+              type="date" 
+              className="p-4 bg-white border border-gray-100 rounded-[20px] shadow-inner font-bold text-xs outline-none focus:ring-2 ring-blue-100 transition-all" 
+              value={filterDate} 
+              onChange={(e) => setFilterDate(e.target.value)} 
+            />
+          )}
+          <div className="relative w-full md:w-64">
+            <input type="text" placeholder="Search title..." className="w-full p-4 pl-12 bg-white border border-gray-100 rounded-[25px] shadow-inner font-bold text-xs italic text-black focus:ring-4 ring-blue-50 outline-none transition-all" value={activeTab === "reserve" ? roomSearch : historySearch} onChange={(e) => activeTab === "reserve" ? setRoomSearch(e.target.value) : setHistorySearch(e.target.value)} />
+            <span className="absolute left-5 top-1/2 -translate-y-1/2 opacity-40">🔍</span>
+          </div>
         </div>
       </div>
 
       {activeTab === "reserve" ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
            {filteredRooms.map(room => {
-             // ✅ ตรวจสอบสถานะการจองปัจจุบัน (Occupied)
              const isOccupied = allBookings.some(b => 
                b.roomId?._id === room._id && b.status === 'APPROVED' && 
                new Date() >= new Date(b.startTime) && new Date() <= new Date(b.endTime)
@@ -195,7 +236,6 @@ export default function BookingPage() {
                      {room.name.charAt(0)}
                    </div>
                    <div className="flex flex-col items-end gap-2">
-                     {/* ✅ ปุ่มแก้ไข/ลบ (Admin Only) */}
                      {isAdmin && (
                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                          <button onClick={() => { setEditingRoom(room); setIsRoomModalOpen(true); }} className="p-2 bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-500 hover:text-white transition-all">✏️</button>
@@ -270,7 +310,6 @@ export default function BookingPage() {
 
       {selectedRoom && <BookingForm room={selectedRoom} onClose={() => setSelectedRoom(null)} onRefresh={() => { fetchRooms(); fetchAllHistory(); fetchMyHistory(); }} />}
       
-      {/* ✅ Modal สำหรับจัดการห้องประชุม (Create/Edit) */}
       {isRoomModalOpen && (
         <RoomManageModal 
           editingRoom={editingRoom} 
